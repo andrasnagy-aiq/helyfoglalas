@@ -553,7 +553,7 @@
   // This exists to keep one trusted person from *accidentally* clearing
   // out someone else's booking through the normal UI, not to stop a
   // determined bad actor.
-  var ADMIN_PASSCODE_HASH = "c1ed04a843c9e0e9296100fd25e563d9257eda8cd037ac509f3f4d1b39346c49";
+  var ADMIN_PASSCODE_HASH = "f5b96dd99e0db8933954678f95f58cdadd8eef6c51bf1ceee42959024df5fc70";
   async function hashText(s) {
     var bytes = new TextEncoder().encode(s);
     var digest = await crypto.subtle.digest("SHA-256", bytes);
