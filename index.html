@@ -588,6 +588,7 @@
   }
 
   async function commitBooking(dateKey, deskIdx, name) {
+    if (!supa) { showToast("Nem sikerült csatlakozni az adatbázishoz."); return; }
     rememberName(name);
     closeModal();
     var res = await supa.from("bookings").insert({ booking_date: dateKey, desk_id: deskIdx + 1, name: name });
@@ -601,12 +602,14 @@
     loadBookings();
   }
   async function commitCancel(dateKey, deskIdx) {
+    if (!supa) { showToast("Nem sikerült csatlakozni az adatbázishoz."); return; }
     closeModal();
     var res = await supa.from("bookings").delete().eq("booking_date", dateKey).eq("desk_id", deskIdx + 1);
     if (res.error) { showToast("Hiba történt, próbáld újra."); }
     loadBookings();
   }
   async function commitMove(dateKey, fromIdx, toIdx, name) {
+    if (!supa) { showToast("Nem sikerült csatlakozni az adatbázishoz."); return; }
     rememberName(name);
     closeModal();
     var res = await supa.from("bookings").update({ desk_id: toIdx + 1 }).eq("booking_date", dateKey).eq("desk_id", fromIdx + 1);
@@ -724,35 +727,42 @@
     modal.className = "modal modal--wide";
     backdrop.appendChild(modal);
 
-    var initialName = rememberedName();
     var days = [];
     [0, 1].forEach(function (offset) {
       var ws = weekStart(offset);
-      for (var i = 0; i < 7; i++) days.push({ offset: offset, idx: i, date: addDays(ws, i) });
+      for (var i = 0; i < 7; i++) days.push({ offset: offset, idx: i, date: addDays(ws, i), dateKey: isoDate(addDays(ws, i)) });
     });
+    // Explicit user toggles, keyed by date — takes precedence over the
+    // freshly-computed default so editing the name mid-selection never
+    // discards a checkbox the user already clicked.
+    var overrides = {};
 
-    var rowsHtml = [0, 1].map(function (offset) {
-      var rows = days.filter(function (d) { return d.offset === offset; }).map(function (d) {
-        var dateKey = isoDate(d.date);
-        var holidayName = getHoliday(d.date);
-        var occupant = slotsFor(dateKey)[deskIdx];
-        var mineNow = !!(occupant && initialName && namesMatch(occupant, initialName));
-        var disabled = !!holidayName || (occupant && !mineNow);
-        var status = holidayName ? "ünnep" : (occupant && !mineNow ? "foglalva: " + occupant : "");
-        return "<label class=\"usual-day-row" + (disabled ? " is-disabled" : "") + "\">" +
-          "<input type=\"checkbox\" data-date=\"" + dateKey + "\"" + (mineNow ? " checked" : "") + (disabled ? " disabled" : "") + ">" +
-          "<span class=\"usual-day-label\">" + DAYS_HU[d.idx] + ", " + fmtHu(d.date) + "</span>" +
-          "<span class=\"usual-day-status\">" + escapeHtml(status) + "</span>" +
-          "</label>";
+    function rowHtml(d, name) {
+      var holidayName = getHoliday(d.date);
+      var occupant = slotsFor(d.dateKey)[deskIdx];
+      var mineNow = !!(occupant && name && namesMatch(occupant, name));
+      var disabled = !!holidayName || (occupant && !mineNow);
+      var checked = Object.prototype.hasOwnProperty.call(overrides, d.dateKey) ? overrides[d.dateKey] : mineNow;
+      var status = holidayName ? "ünnep" : (occupant && !mineNow ? "foglalva: " + occupant : "");
+      return "<label class=\"usual-day-row" + (disabled ? " is-disabled" : "") + "\">" +
+        "<input type=\"checkbox\" data-date=\"" + d.dateKey + "\"" + (checked ? " checked" : "") + (disabled ? " disabled" : "") + ">" +
+        "<span class=\"usual-day-label\">" + DAYS_HU[d.idx] + ", " + fmtHu(d.date) + "</span>" +
+        "<span class=\"usual-day-status\">" + escapeHtml(status) + "</span>" +
+        "</label>";
+    }
+    function renderRows() {
+      var name = nameInput.value.trim();
+      dayList.innerHTML = [0, 1].map(function (offset) {
+        var rows = days.filter(function (d) { return d.offset === offset; }).map(function (d) { return rowHtml(d, name); }).join("");
+        return "<div class=\"usual-week-label\">" + (offset === 0 ? "Ez a hét" : "Jövő hét") + "</div>" + rows;
       }).join("");
-      return "<div class=\"usual-week-label\">" + (offset === 0 ? "Ez a hét" : "Jövő hét") + "</div>" + rows;
-    }).join("");
+    }
 
     modal.innerHTML =
       "<h3>" + (deskIdx + 1) + ". asztal</h3>" +
       "<p class=\"desk-owner\">" + escapeHtml(owner) + " szokásos asztala.</p>" +
       "<label>Neved<input type=\"text\" id=\"df-name\" maxlength=\"40\" placeholder=\"pl. Kovács Anna\"></label>" +
-      "<div class=\"usual-day-list\">" + rowsHtml + "</div>" +
+      "<div class=\"usual-day-list\" id=\"df-day-list\"></div>" +
       "<div class=\"modal-error\" id=\"df-error\"></div>" +
       "<div class=\"modal-actions\">" +
       "<button class=\"btn\" id=\"df-cancel\">Mégse</button>" +
@@ -761,7 +771,17 @@
     root.appendChild(backdrop);
 
     var nameInput = modal.querySelector("#df-name");
-    nameInput.value = initialName;
+    var dayList = modal.querySelector("#df-day-list");
+    nameInput.value = rememberedName();
+
+    dayList.addEventListener("change", function (e) {
+      if (e.target && e.target.matches("input[type=checkbox]")) {
+        overrides[e.target.getAttribute("data-date")] = e.target.checked;
+      }
+    });
+    nameInput.addEventListener("input", renderRows);
+    renderRows();
+
     modal.querySelector("#df-cancel").addEventListener("click", closeModal);
     modal.querySelector("#df-save").addEventListener("click", function () { saveUsualSelections(deskIdx, modal, nameInput); });
     nameInput.focus();
@@ -774,35 +794,39 @@
   }
 
   async function saveUsualSelections(deskIdx, modal, nameInput) {
+    if (!supa) { showToast("Nem sikerült csatlakozni az adatbázishoz."); return; }
     var name = nameInput.value.trim();
     if (!name) { modal.querySelector("#df-error").textContent = "Add meg a neved a mentéshez."; return; }
     var saveBtn = modal.querySelector("#df-save");
     saveBtn.disabled = true;
     saveBtn.textContent = "Mentés…";
     var checkboxes = modal.querySelectorAll("input[type=checkbox]");
+    var failures = 0;
     for (var i = 0; i < checkboxes.length; i++) {
       var cb = checkboxes[i];
       if (cb.disabled) continue;
       var dateKey = cb.getAttribute("data-date");
       var occupant = slotsFor(dateKey)[deskIdx];
       var isMine = !!(occupant && namesMatch(occupant, name));
+      var res = null;
       if (cb.checked && !isMine) {
         if (!occupant) {
           var otherIdx = findDeskForName(dateKey, name, deskIdx);
           if (otherIdx !== -1) {
-            await supa.from("bookings").update({ desk_id: deskIdx + 1 }).eq("booking_date", dateKey).eq("desk_id", otherIdx + 1);
+            res = await supa.from("bookings").update({ desk_id: deskIdx + 1 }).eq("booking_date", dateKey).eq("desk_id", otherIdx + 1);
           } else {
-            await supa.from("bookings").insert({ booking_date: dateKey, desk_id: deskIdx + 1, name: name });
+            res = await supa.from("bookings").insert({ booking_date: dateKey, desk_id: deskIdx + 1, name: name });
           }
         }
       } else if (!cb.checked && isMine) {
-        await supa.from("bookings").delete().eq("booking_date", dateKey).eq("desk_id", deskIdx + 1);
+        res = await supa.from("bookings").delete().eq("booking_date", dateKey).eq("desk_id", deskIdx + 1);
       }
+      if (res && res.error) failures++;
     }
     rememberName(name);
     closeModal();
     await loadBookings();
-    showToast("Mentve.");
+    showToast(failures > 0 ? "Néhány nap mentése nem sikerült, próbáld újra." : "Mentve.");
   }
 
   function escapeHtml(s) {
