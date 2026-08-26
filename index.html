@@ -7,7 +7,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Work+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<style id="app-styles">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<style>
   :root {
     --bg: #F5F1E7;
     --surface: #FFFFFF;
@@ -91,6 +92,8 @@
   button { font: inherit; color: inherit; }
   :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
   .mono { font-family: 'IBM Plex Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+
+  .loading { color: var(--muted); font-size: 14px; padding: 40px 0; text-align: center; }
 
   /* ---------- header ---------- */
   .topbar {
@@ -338,7 +341,6 @@
     z-index: 60;
   }
 
-
   @media (prefers-reduced-motion: no-preference) {
     .modal-backdrop { animation: fade .12s ease-out; }
     .modal { animation: rise .15s ease-out; }
@@ -355,13 +357,18 @@
 </style>
 </head>
 <body>
-<div id="app"></div>
+<div id="app"><div class="loading">Betöltés…</div></div>
 
-<script id="state-data" type="application/json">{"bookings":{}}</script>
 <script>
 (function () {
   "use strict";
-  var APP_SCRIPT_SRC = document.currentScript.textContent;
+
+  /* ================= backend (Supabase) ================= */
+  var SUPABASE_URL = "https://fhenlkgehsxzrhwodzua.supabase.co";
+  var SUPABASE_KEY = "sb_publishable_dFViejjUM3dk2RQ2WCHHxw_8L7q1XWq";
+  var supa = (window.supabase && window.supabase.createClient)
+    ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY)
+    : null;
 
   /* ================= config ================= */
   // Real office floor plan (L-shaped room). x/y are % of the room's
@@ -450,9 +457,9 @@
   function getHoliday(date) { return holidaysForYear(date.getFullYear())[isoDate(date)] || null; }
 
   /* ================= state ================= */
-  var state = JSON.parse(document.getElementById("state-data").textContent);
+  var state = { bookings: {} };
+  var loaded = false;
 
-  function deepCopyState(s) { return JSON.parse(JSON.stringify(s)); }
   function slotsFor(dateKey) { return state.bookings[dateKey] || new Array(DESK_COUNT).fill(null); }
   function occupancyFor(dateKey) { return slotsFor(dateKey).filter(Boolean).length; }
 
@@ -480,28 +487,33 @@
     try { localStorage.setItem("db_name", n); } catch (e) {}
   }
 
-  /* ================= sync capability ================= */
-  var artifactApi = null;
-  var readOnly = false;
-  if (window.claude && window.claude.use) {
-    window.claude.use("artifact").then(function (api) {
-      artifactApi = api;
+  /* ================= data sync ================= */
+  async function loadBookings() {
+    if (!supa) { loaded = true; renderApp(); showToast("Nem sikerült csatlakozni az adatbázishoz."); return; }
+    var cutoff = isoDate(weekStart(0));
+    var res = await supa.from("bookings").select("booking_date, desk_id, name").gte("booking_date", cutoff);
+    if (res.error) {
+      loaded = true;
       renderApp();
-    }).catch(function () { renderApp(); });
+      showToast("Nem sikerült betölteni a foglalásokat.");
+      return;
+    }
+    var next = {};
+    res.data.forEach(function (row) {
+      if (!next[row.booking_date]) next[row.booking_date] = new Array(DESK_COUNT).fill(null);
+      next[row.booking_date][row.desk_id - 1] = row.name;
+    });
+    state.bookings = next;
+    loaded = true;
+    renderApp();
   }
 
-  /* ================= document rebuild (for publish) ================= */
-  var DOC_HEAD = "<!doctype html>\n<html lang=\"hu\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>Book your desk</title>\n<link rel=\"preconnect\" href=\"https://fonts.googleapis.com\">\n<link rel=\"preconnect\" href=\"https://fonts.gstatic.com\" crossorigin>\n<link href=\"https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Work+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap\" rel=\"stylesheet\">\n<style id=\"app-styles\">" + document.getElementById("app-styles").textContent + "</style>\n</head>\n<body>\n<div id=\"app\"></div>\n\n<script id=\"state-data\" type=\"application/json\">";
-  var DOC_TAIL_HEAD = "<\/script>\n<script>";
-  var DOC_TAIL = "<\/script>\n</body>\n</html>";
-
-  function safeJsonForScript(obj) {
-    return JSON.stringify(obj).replace(/</g, "\\u003c");
+  if (supa) {
+    supa.channel("bookings-sync")
+      .on("postgres_changes", { event: "*", schema: "public", table: "bookings" }, function () { loadBookings(); })
+      .subscribe();
   }
-
-  function buildDocument(stateObj) {
-    return DOC_HEAD + safeJsonForScript(stateObj) + DOC_TAIL_HEAD + APP_SCRIPT_SRC + DOC_TAIL;
-  }
+  loadBookings();
 
   /* ================= toast ================= */
   var toastTimer = null;
@@ -518,38 +530,6 @@
   }
 
   /* ================= booking actions ================= */
-  function pruneOldBookings(bookings) {
-    var cutoff = isoDate(weekStart(0));
-    var pruned = {};
-    Object.keys(bookings).forEach(function (key) {
-      if (key >= cutoff) pruned[key] = bookings[key];
-    });
-    return pruned;
-  }
-
-  function publishState(next) {
-    next.bookings = pruneOldBookings(next.bookings);
-    saveView();
-    if (!artifactApi) {
-      state = next;
-      renderApp();
-      showToast("Csak ezen a gépen mentve — az élő szinkron itt nem elérhető.");
-      return;
-    }
-    var html = buildDocument(next);
-    artifactApi.publish(html).catch(function (err) {
-      var code = err && err.code;
-      if (code === "conflict") { return; }
-      if (code === "not_writer" || code === "not_granted") {
-        readOnly = true;
-        renderApp();
-        showToast("Csak megtekintés — nincs jogosultságod foglalni.");
-        return;
-      }
-      showToast("Hiba történt, próbáld újra.");
-    });
-  }
-
   function namesMatch(a, b) { return a.trim().toLowerCase() === b.trim().toLowerCase(); }
   function findDeskForName(dateKey, name, excludeIdx) {
     var slots = slotsFor(dateKey);
@@ -560,29 +540,31 @@
     return -1;
   }
 
-  function commitBooking(dateKey, deskIdx, name) {
-    var next = deepCopyState(state);
-    if (!next.bookings[dateKey]) next.bookings[dateKey] = new Array(DESK_COUNT).fill(null);
-    next.bookings[dateKey][deskIdx] = name;
+  async function commitBooking(dateKey, deskIdx, name) {
     rememberName(name);
     closeModal();
-    publishState(next);
+    var res = await supa.from("bookings").insert({ booking_date: dateKey, desk_id: deskIdx + 1, name: name });
+    if (res.error) {
+      if (String(res.error.message).indexOf("one_per_name_per_day") !== -1) {
+        showToast("Már foglaltál asztalt erre a napra.");
+      } else {
+        showToast("Ezt az asztalt épp most foglalták le, válassz másikat.");
+      }
+    }
+    loadBookings();
   }
-  function commitCancel(dateKey, deskIdx) {
-    var next = deepCopyState(state);
-    if (!next.bookings[dateKey]) next.bookings[dateKey] = new Array(DESK_COUNT).fill(null);
-    next.bookings[dateKey][deskIdx] = null;
+  async function commitCancel(dateKey, deskIdx) {
     closeModal();
-    publishState(next);
+    var res = await supa.from("bookings").delete().eq("booking_date", dateKey).eq("desk_id", deskIdx + 1);
+    if (res.error) { showToast("Hiba történt, próbáld újra."); }
+    loadBookings();
   }
-  function commitMove(dateKey, fromIdx, toIdx, name) {
-    var next = deepCopyState(state);
-    if (!next.bookings[dateKey]) next.bookings[dateKey] = new Array(DESK_COUNT).fill(null);
-    next.bookings[dateKey][fromIdx] = null;
-    next.bookings[dateKey][toIdx] = name;
+  async function commitMove(dateKey, fromIdx, toIdx, name) {
     rememberName(name);
     closeModal();
-    publishState(next);
+    var res = await supa.from("bookings").update({ desk_id: toIdx + 1 }).eq("booking_date", dateKey).eq("desk_id", fromIdx + 1);
+    if (res.error) { showToast("Nem sikerült áthelyezni, próbáld újra."); }
+    loadBookings();
   }
 
   /* ================= modal ================= */
@@ -596,7 +578,6 @@
     }
   }
   function openDeskModal(dateKey, deskIdx, dateObj) {
-    if (readOnly) { showToast("Csak megtekintés — nincs jogosultságod foglalni."); return; }
     var holidayName = getHoliday(dateObj);
     if (holidayName) { showToast("Munkaszüneti nap — " + holidayName + ", nincs foglalás."); return; }
     closeModal();
@@ -690,6 +671,11 @@
     var app = document.getElementById("app");
     app.innerHTML = "";
 
+    if (!loaded) {
+      app.innerHTML = "<div class=\"loading\">Betöltés…</div>";
+      return;
+    }
+
     /* header */
     var header = document.createElement("header");
     header.className = "topbar";
@@ -712,7 +698,7 @@
       btn.innerHTML =
         "<span class=\"label\">" + (off === 0 ? "Ez a hét" : "Jövő hét") + "</span>" +
         "<span class=\"range\">" + fmtHu(ws) + " – " + fmtHu(we) + "</span>";
-      btn.addEventListener("click", function () { view.weekOffset = off; renderApp(); });
+      btn.addEventListener("click", function () { view.weekOffset = off; saveView(); renderApp(); });
       weekSwitch.appendChild(btn);
     });
     header.appendChild(weekSwitch);
@@ -740,7 +726,7 @@
         "<span class=\"day-name short\">" + DAYS_HU_SHORT[i] + "</span>" +
         "<span class=\"day-date\">" + fmtHu(d) + "</span>" +
         "<span class=\"day-badge\">" + (holiday ? "ünnep" : occ + "/" + DESK_COUNT) + "</span>";
-      (function (idx) { tab.addEventListener("click", function () { view.dayIndex = idx; renderApp(); }); })(i);
+      (function (idx) { tab.addEventListener("click", function () { view.dayIndex = idx; saveView(); renderApp(); }); })(i);
       tabs.appendChild(tab);
     }
     app.appendChild(tabs);
@@ -816,8 +802,6 @@
     var modalRoot = document.getElementById("modal-root");
     if (!modalRoot) { modalRoot = document.createElement("div"); modalRoot.id = "modal-root"; document.body.appendChild(modalRoot); }
   }
-
-  renderApp();
 })();
 </script>
 </body>
