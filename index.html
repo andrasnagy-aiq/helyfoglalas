@@ -543,14 +543,22 @@
   }
 
   /* ================= admin mode ================= */
-  // A shared passcode, not real access control: anyone with the deployed
-  // page's source (or a browser's dev tools) can already write or delete
-  // any row directly against the database regardless of this flag — the
-  // whole app runs on an open API key with no per-user identity. This
-  // exists to keep one trusted person from *accidentally* clearing out
-  // someone else's booking through the normal UI, not to stop a
+  // A shared passcode, not real access control: this only stops someone
+  // from casually reading the passcode off the page source (it's stored
+  // as a SHA-256 hash, never in plaintext). It does NOT stop a visitor
+  // who opens dev tools and understands the code from bypassing the gate
+  // entirely (e.g. sessionStorage.setItem("db_admin","1")) without ever
+  // knowing the passcode — the whole app runs on an open API key with no
+  // per-user identity, so real protection isn't possible client-side.
+  // This exists to keep one trusted person from *accidentally* clearing
+  // out someone else's booking through the normal UI, not to stop a
   // determined bad actor.
-  var ADMIN_PASSCODE = "deskadmin2026";
+  var ADMIN_PASSCODE_HASH = "f5b96dd99e0db8933954678f95f58cdadd8eef6c51bf1ceee42959024df5fc70";
+  async function hashText(s) {
+    var bytes = new TextEncoder().encode(s);
+    var digest = await crypto.subtle.digest("SHA-256", bytes);
+    return Array.from(new Uint8Array(digest)).map(function (b) { return b.toString(16).padStart(2, "0"); }).join("");
+  }
   var isAdmin = false;
   try { isAdmin = sessionStorage.getItem("db_admin") === "1"; } catch (e) {}
 
@@ -660,8 +668,13 @@
     root.appendChild(backdrop);
 
     var passInput = modal.querySelector("#admin-pass");
-    function trySubmit() {
-      if (passInput.value === ADMIN_PASSCODE) {
+    async function trySubmit() {
+      if (!window.crypto || !window.crypto.subtle) {
+        modal.querySelector("#df-error").textContent = "A böngésződ ezt nem támogatja.";
+        return;
+      }
+      var hash = await hashText(passInput.value);
+      if (hash === ADMIN_PASSCODE_HASH) {
         isAdmin = true;
         try { sessionStorage.setItem("db_admin", "1"); } catch (e) {}
         closeModal();
