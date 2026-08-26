@@ -1,0 +1,816 @@
+<!doctype html>
+<html lang="hu">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Book your desk</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Work+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #F5F1E7;
+    --surface: #FFFFFF;
+    --surface-2: #ECE5D3;
+    --ink: #23221D;
+    --muted: #726C5C;
+    --border: #DDD5BF;
+    --accent: #2B6E63;
+    --accent-strong: #1E4F47;
+    --accent-ink: #FFFFFF;
+    --available: #3F8F5F;
+    --available-bg: #E3F1E6;
+    --booked: #C4622D;
+    --booked-bg: #FBE9DD;
+    --holiday: #A83B32;
+    --holiday-bg: #F5E1DC;
+    --weekend-bg: #EFE9D9;
+    --shadow: 0 1px 2px rgba(35,34,29,.06), 0 12px 28px rgba(35,34,29,.10);
+    --focus: #2B6E63;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #1C1B17;
+      --surface: #242320;
+      --surface-2: #2D2B24;
+      --ink: #EFEAE0;
+      --muted: #A39D89;
+      --border: #3B382E;
+      --accent: #6BB09D;
+      --accent-strong: #8BC7B6;
+      --accent-ink: #12211D;
+      --available: #6FBF8B;
+      --available-bg: #1E3226;
+      --booked: #E0995F;
+      --booked-bg: #3A2B1C;
+      --holiday: #E2867A;
+      --holiday-bg: #3B221E;
+      --weekend-bg: #262420;
+      --shadow: 0 1px 2px rgba(0,0,0,.35), 0 12px 28px rgba(0,0,0,.4);
+      --focus: #8BC7B6;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #1C1B17;
+    --surface: #242320;
+    --surface-2: #2D2B24;
+    --ink: #EFEAE0;
+    --muted: #A39D89;
+    --border: #3B382E;
+    --accent: #6BB09D;
+    --accent-strong: #8BC7B6;
+    --accent-ink: #12211D;
+    --available: #6FBF8B;
+    --available-bg: #1E3226;
+    --booked: #E0995F;
+    --booked-bg: #3A2B1C;
+    --holiday: #E2867A;
+    --holiday-bg: #3B221E;
+    --weekend-bg: #262420;
+    --shadow: 0 1px 2px rgba(0,0,0,.35), 0 12px 28px rgba(0,0,0,.4);
+    --focus: #8BC7B6;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin:0; padding:0; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'Work Sans', system-ui, sans-serif;
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+  #app {
+    max-width: 920px;
+    margin: 0 auto;
+    padding: 28px 20px 60px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+  button { font: inherit; color: inherit; }
+  :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  .mono { font-family: 'IBM Plex Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+
+  /* ---------- header ---------- */
+  .topbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    justify-content: space-between;
+    align-items: flex-end;
+  }
+  .brand h1 {
+    font-family: 'Fraunces', serif;
+    font-optical-sizing: auto;
+    font-weight: 600;
+    font-size: clamp(28px, 4vw, 38px);
+    margin: 0;
+    letter-spacing: -0.01em;
+    text-wrap: balance;
+  }
+  .brand .tagline {
+    margin: 4px 0 0;
+    color: var(--muted);
+    font-size: 14px;
+  }
+  .week-switch {
+    display: flex;
+    gap: 8px;
+    background: var(--surface-2);
+    padding: 4px;
+    border-radius: 12px;
+  }
+  .week-pill {
+    border: none;
+    background: transparent;
+    padding: 8px 16px;
+    border-radius: 9px;
+    cursor: pointer;
+    text-align: left;
+    display: flex;
+    flex-direction: column;
+    line-height: 1.3;
+  }
+  .week-pill .label { font-weight: 600; font-size: 14px; }
+  .week-pill .range { font-size: 12px; color: var(--muted); font-family: 'IBM Plex Mono', monospace; }
+  .week-pill.active { background: var(--surface); box-shadow: var(--shadow); }
+  .week-pill.active .label { color: var(--accent-strong); }
+
+  /* ---------- day tabs ---------- */
+  .day-tabs {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 6px;
+  }
+  .day-tab {
+    border: 1px solid var(--border);
+    background: var(--surface);
+    border-radius: 10px;
+    padding: 10px 4px 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+    min-width: 0;
+  }
+  .day-tab .day-name { font-size: 12.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+  .day-tab .day-name.short { display: none; }
+  .day-tab .day-date { font-size: 11px; color: var(--muted); font-family: 'IBM Plex Mono', monospace; }
+  .day-tab .day-badge {
+    margin-top: 2px;
+    font-size: 10.5px;
+    font-family: 'IBM Plex Mono', monospace;
+    padding: 1px 7px;
+    border-radius: 999px;
+    background: var(--available-bg);
+    color: var(--available);
+  }
+  .day-tab.is-full .day-badge { background: var(--booked-bg); color: var(--booked); }
+  .day-tab.is-weekend { background: var(--weekend-bg); }
+  .day-tab.is-holiday .day-badge { background: var(--holiday-bg); color: var(--holiday); }
+  .day-tab.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+  .day-tab.active .day-name { color: var(--accent-strong); }
+
+  /* ---------- board ---------- */
+  .board {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .board-heading {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .board-heading h2 {
+    font-family: 'Fraunces', serif;
+    font-weight: 600;
+    font-size: 21px;
+    margin: 0;
+  }
+  .board-heading .occupancy { font-size: 13px; color: var(--muted); font-family: 'IBM Plex Mono', monospace; }
+
+  .holiday-banner {
+    background: var(--holiday-bg);
+    color: var(--holiday);
+    border-radius: 10px;
+    padding: 12px 16px;
+    font-size: 14px;
+    font-weight: 500;
+  }
+
+  .floor-wrap { overflow-x: auto; }
+  .floor {
+    position: relative;
+    width: 100%;
+    min-width: 480px;
+    aspect-ratio: 1110 / 920;
+  }
+  .floor.disabled { opacity: .45; pointer-events: none; }
+  .floor-plan-svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+
+  .desk {
+    position: absolute;
+    width: 80px;
+    height: 40px;
+    transform: translate(-50%, -50%) rotate(var(--rot));
+    border-radius: 8px;
+    border: 2px solid var(--border);
+    background: var(--surface);
+    cursor: pointer;
+    padding: 0;
+  }
+  .desk::before {
+    content: "";
+    position: absolute;
+    top: -6px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 26px;
+    height: 7px;
+    background: var(--border);
+    border-radius: 2px;
+  }
+  .desk-label {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 74px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1px;
+    transform: translate(-50%, -50%) rotate(calc(var(--rot) * -1));
+  }
+  .desk.desk--portrait .desk-label { width: 34px; }
+  .desk-label .desk-num { font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; color: var(--muted); }
+  .desk-label .desk-name {
+    font-family: 'Work Sans', sans-serif;
+    font-weight: 600;
+    font-size: 12px;
+    color: var(--ink);
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .desk.available { border-color: var(--available); }
+  .desk.available:hover { background: var(--available-bg); }
+  .desk.booked { background: var(--booked-bg); border-color: var(--booked); }
+  .desk.booked::before { background: var(--booked); }
+  .desk.available::before { background: var(--available); }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 18px; }
+  .legend-item { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--muted); }
+  .legend-swatch { width: 14px; height: 14px; border-radius: 4px; border: 2px solid var(--available); }
+  .legend-swatch.booked { border-color: var(--booked); background: var(--booked-bg); }
+  .legend-swatch.holiday { border-color: var(--holiday); background: var(--holiday-bg); }
+
+  /* ---------- modal ---------- */
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(20, 18, 12, .4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    z-index: 50;
+  }
+  .modal {
+    background: var(--surface);
+    border-radius: 16px;
+    padding: 24px;
+    width: min(380px, 100%);
+    box-shadow: var(--shadow);
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .modal h3 { margin: 0; font-family: 'Fraunces', serif; font-size: 19px; font-weight: 600; }
+  .modal p { margin: 0; font-size: 13.5px; color: var(--muted); }
+  .modal label { font-size: 13px; font-weight: 600; display: flex; flex-direction: column; gap: 6px; }
+  .modal input {
+    font: inherit;
+    padding: 10px 12px;
+    border-radius: 9px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--ink);
+  }
+  .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+  .btn {
+    border: 1px solid var(--border);
+    background: var(--surface);
+    padding: 9px 16px;
+    border-radius: 9px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 13.5px;
+  }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .btn.primary:disabled { opacity: .5; cursor: not-allowed; }
+  .btn.danger { background: var(--booked-bg); border-color: var(--booked); color: var(--booked); }
+  .btn.danger:disabled { opacity: .5; cursor: not-allowed; }
+  .modal-error { font-size: 12.5px; color: var(--booked); min-height: 1em; }
+
+  /* ---------- toast ---------- */
+  .toast {
+    position: fixed;
+    left: 50%;
+    bottom: 24px;
+    transform: translateX(-50%);
+    background: var(--ink);
+    color: var(--bg);
+    padding: 10px 18px;
+    border-radius: 999px;
+    font-size: 13px;
+    box-shadow: var(--shadow);
+    z-index: 60;
+  }
+
+  footer.hint { font-size: 12px; color: var(--muted); text-align: center; }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .modal-backdrop { animation: fade .12s ease-out; }
+    .modal { animation: rise .15s ease-out; }
+  }
+  @keyframes fade { from { opacity: 0; } }
+  @keyframes rise { from { opacity: 0; transform: translateY(6px); } }
+
+  @media (max-width: 560px) {
+    .day-tabs { grid-template-columns: repeat(7, minmax(40px, 1fr)); }
+    .day-tab .day-name { font-size: 10.5px; }
+    .day-tab .day-name.full { display: none; }
+    .day-tab .day-name.short { display: inline; }
+  }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script id="state-data" type="application/json">{"bookings":{}}</script>
+<script>
+(function () {
+  "use strict";
+  var APP_SCRIPT_SRC = document.currentScript.textContent;
+
+  /* ================= config ================= */
+  // Real office floor plan (L-shaped room). x/y are % of the room's
+  // bounding box, matching ROOM_OUTLINE's viewBox; rot 0 = landscape desk
+  // (100x50), rot 90 = portrait desk (50x100).
+  var DESKS = [
+    { id: 1, x: 58.1, y: 20.8, rot: 0 },
+    { id: 2, x: 76.4, y: 20.8, rot: 0 },
+    { id: 3, x: 58.1, y: 32.3, rot: 180 },
+    { id: 4, x: 76.4, y: 32.3, rot: 180 },
+    { id: 5, x: 41.4, y: 65.3, rot: 270 },
+    { id: 6, x: 41.4, y: 87.6, rot: 270 },
+    { id: 7, x: 73.9, y: 57.8, rot: 270 },
+    { id: 8, x: 83.3, y: 57.8, rot: 90 },
+    { id: 9, x: 74.1, y: 87.5, rot: 270 },
+    { id: 10, x: 83.8, y: 87.5, rot: 90 }
+  ];
+  var DESK_COUNT = DESKS.length;
+  // Outer wall outline in the same 0-100 coordinate space, viewBox units
+  // (1110 x 920, matching the .floor aspect-ratio 1-to-1 with % above).
+  var ROOM_OUTLINE = "0,0 1110,0 1110,920 315,920 315,195 0,195";
+  // Internal wall separating the desk 1-4 room from the desk 5-10 room,
+  // with a doorway gap in the middle (as drawn on the floor plan).
+  var INNER_WALLS = [
+    [315, 427, 360, 427],
+    [470, 427, 1110, 427]
+  ];
+
+  var MONTHS_HU = ["jan.", "febr.", "márc.", "ápr.", "máj.", "jún.", "júl.", "aug.", "szept.", "okt.", "nov.", "dec."];
+  var DAYS_HU = ["Hétfő", "Kedd", "Szerda", "Csütörtök", "Péntek", "Szombat", "Vasárnap"];
+  var DAYS_HU_SHORT = ["Hét", "Kedd", "Szer", "Csüt", "Pén", "Szo", "Vas"];
+
+  /* ================= date helpers ================= */
+  function pad2(n) { return (n < 10 ? "0" : "") + n; }
+  function isoDate(d) { return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate()); }
+  function fmtHu(d) { return MONTHS_HU[d.getMonth()] + " " + d.getDate() + "."; }
+  function addDays(d, n) { var r = new Date(d); r.setDate(r.getDate() + n); return r; }
+  function mondayOf(d) {
+    var date = new Date(d);
+    date.setHours(0, 0, 0, 0);
+    var day = date.getDay();
+    var diff = (day === 0 ? -6 : 1 - day);
+    date.setDate(date.getDate() + diff);
+    return date;
+  }
+  function weekStart(offset) { return addDays(mondayOf(new Date()), offset * 7); }
+
+  /* ================= Hungarian public holidays ================= */
+  function easterSunday(year) {
+    var a = year % 19, b = Math.floor(year / 100), c = year % 100;
+    var d = Math.floor(b / 4), e = b % 4;
+    var f = Math.floor((b + 8) / 25);
+    var g = Math.floor((b - f + 1) / 3);
+    var h = (19 * a + b - d - g + 15) % 30;
+    var i = Math.floor(c / 4), k = c % 4;
+    var l = (32 + 2 * e + 2 * i - h - k) % 7;
+    var m = Math.floor((a + 11 * h + 22 * l) / 451);
+    var month = Math.floor((h + l - 7 * m + 114) / 31);
+    var day = ((h + l - 7 * m + 114) % 31) + 1;
+    return new Date(year, month - 1, day);
+  }
+  var holidayCache = {};
+  function holidaysForYear(year) {
+    if (holidayCache[year]) return holidayCache[year];
+    var easter = easterSunday(year);
+    var map = {};
+    function fix(m, d, name) { map[year + "-" + pad2(m) + "-" + pad2(d)] = name; }
+    function rel(offset, name) { map[isoDate(addDays(easter, offset))] = name; }
+    fix(1, 1, "Újév");
+    fix(3, 15, "Nemzeti ünnep");
+    fix(5, 1, "A munka ünnepe");
+    fix(8, 20, "Az államalapítás ünnepe");
+    fix(10, 23, "Nemzeti ünnep");
+    fix(11, 1, "Mindenszentek");
+    fix(12, 25, "Karácsony");
+    fix(12, 26, "Karácsony 2. napja");
+    rel(-2, "Nagypéntek");
+    rel(0, "Húsvétvasárnap");
+    rel(1, "Húsvéthétfő");
+    rel(49, "Pünkösdvasárnap");
+    rel(50, "Pünkösdhétfő");
+    holidayCache[year] = map;
+    return map;
+  }
+  function getHoliday(date) { return holidaysForYear(date.getFullYear())[isoDate(date)] || null; }
+
+  /* ================= state ================= */
+  var state = JSON.parse(document.getElementById("state-data").textContent);
+
+  function deepCopyState(s) { return JSON.parse(JSON.stringify(s)); }
+  function slotsFor(dateKey) { return state.bookings[dateKey] || new Array(DESK_COUNT).fill(null); }
+  function occupancyFor(dateKey) { return slotsFor(dateKey).filter(Boolean).length; }
+
+  /* ================= local (per-viewer) view state ================= */
+  function defaultView() {
+    var today = new Date();
+    return { weekOffset: 0, dayIndex: (today.getDay() + 6) % 7 };
+  }
+  function restoreView() {
+    try {
+      var raw = sessionStorage.getItem("db_view");
+      return raw ? JSON.parse(raw) : null;
+    } catch (e) { return null; }
+  }
+  var view = restoreView() || defaultView();
+  function saveView() {
+    try { sessionStorage.setItem("db_view", JSON.stringify(view)); } catch (e) {}
+  }
+  function currentDate() { return addDays(weekStart(view.weekOffset), view.dayIndex); }
+
+  function rememberedName() {
+    try { return localStorage.getItem("db_name") || ""; } catch (e) { return ""; }
+  }
+  function rememberName(n) {
+    try { localStorage.setItem("db_name", n); } catch (e) {}
+  }
+
+  /* ================= sync capability ================= */
+  var artifactApi = null;
+  var readOnly = false;
+  if (window.claude && window.claude.use) {
+    window.claude.use("artifact").then(function (api) {
+      artifactApi = api;
+      renderApp();
+    }).catch(function () { renderApp(); });
+  }
+
+  /* ================= document rebuild (for publish) ================= */
+  var DOC_HEAD = "<!doctype html>\n<html lang=\"hu\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>Book your desk</title>\n<link rel=\"preconnect\" href=\"https://fonts.googleapis.com\">\n<link rel=\"preconnect\" href=\"https://fonts.gstatic.com\" crossorigin>\n<link href=\"https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Work+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap\" rel=\"stylesheet\">\n<style>" + document.querySelector("style").textContent + "</style>\n</head>\n<body>\n<div id=\"app\"></div>\n\n<script id=\"state-data\" type=\"application/json\">";
+  var DOC_TAIL_HEAD = "<\/script>\n<script>";
+  var DOC_TAIL = "<\/script>\n</body>\n</html>";
+
+  function buildDocument(stateObj) {
+    return DOC_HEAD + JSON.stringify(stateObj) + DOC_TAIL_HEAD + APP_SCRIPT_SRC + DOC_TAIL;
+  }
+
+  /* ================= toast ================= */
+  var toastTimer = null;
+  function showToast(msg) {
+    var root = document.getElementById("toast-root");
+    if (!root) { root = document.createElement("div"); root.id = "toast-root"; document.body.appendChild(root); }
+    root.innerHTML = "";
+    var el = document.createElement("div");
+    el.className = "toast";
+    el.textContent = msg;
+    root.appendChild(el);
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { el.remove(); }, 3200);
+  }
+
+  /* ================= booking actions ================= */
+  function pruneOldBookings(bookings) {
+    var cutoff = isoDate(weekStart(0));
+    var pruned = {};
+    Object.keys(bookings).forEach(function (key) {
+      if (key >= cutoff) pruned[key] = bookings[key];
+    });
+    return pruned;
+  }
+
+  function publishState(next) {
+    next.bookings = pruneOldBookings(next.bookings);
+    saveView();
+    if (!artifactApi) {
+      state = next;
+      renderApp();
+      showToast("Csak ezen a gépen mentve — az élő szinkron itt nem elérhető.");
+      return;
+    }
+    var html = buildDocument(next);
+    artifactApi.publish(html).catch(function (err) {
+      var code = err && err.code;
+      if (code === "conflict") { return; }
+      if (code === "not_writer" || code === "not_granted") {
+        readOnly = true;
+        renderApp();
+        showToast("Csak megtekintés — nincs jogosultságod foglalni.");
+        return;
+      }
+      showToast("Hiba történt, próbáld újra.");
+    });
+  }
+
+  function namesMatch(a, b) { return a.trim().toLowerCase() === b.trim().toLowerCase(); }
+  function findDeskForName(dateKey, name, excludeIdx) {
+    var slots = slotsFor(dateKey);
+    for (var i = 0; i < slots.length; i++) {
+      if (i === excludeIdx) continue;
+      if (slots[i] && namesMatch(slots[i], name)) return i;
+    }
+    return -1;
+  }
+
+  function commitBooking(dateKey, deskIdx, name) {
+    var next = deepCopyState(state);
+    if (!next.bookings[dateKey]) next.bookings[dateKey] = new Array(DESK_COUNT).fill(null);
+    next.bookings[dateKey][deskIdx] = name;
+    rememberName(name);
+    closeModal();
+    publishState(next);
+  }
+  function commitCancel(dateKey, deskIdx) {
+    var next = deepCopyState(state);
+    if (!next.bookings[dateKey]) next.bookings[dateKey] = new Array(DESK_COUNT).fill(null);
+    next.bookings[dateKey][deskIdx] = null;
+    closeModal();
+    publishState(next);
+  }
+  function commitMove(dateKey, fromIdx, toIdx, name) {
+    var next = deepCopyState(state);
+    if (!next.bookings[dateKey]) next.bookings[dateKey] = new Array(DESK_COUNT).fill(null);
+    next.bookings[dateKey][fromIdx] = null;
+    next.bookings[dateKey][toIdx] = name;
+    rememberName(name);
+    closeModal();
+    publishState(next);
+  }
+
+  /* ================= modal ================= */
+  function closeModal() {
+    var root = document.getElementById("modal-root");
+    if (root) root.innerHTML = "";
+  }
+  function openDeskModal(dateKey, deskIdx, dateObj) {
+    if (readOnly) { showToast("Csak megtekintés — nincs jogosultságod foglalni."); return; }
+    var root = document.getElementById("modal-root");
+    var existing = slotsFor(dateKey)[deskIdx];
+    var backdrop = document.createElement("div");
+    backdrop.className = "modal-backdrop";
+    backdrop.addEventListener("click", function (e) { if (e.target === backdrop) closeModal(); });
+
+    var modal = document.createElement("div");
+    modal.className = "modal";
+    backdrop.appendChild(modal);
+
+    var deskLabel = deskIdx + 1;
+    var dateLabel = DAYS_HU[view.dayIndex] + ", " + fmtHu(dateObj);
+
+    if (!existing) {
+      modal.innerHTML =
+        "<h3>" + deskLabel + ". asztal</h3>" +
+        "<p>" + dateLabel + "</p>" +
+        "<label>Neved<input type=\"text\" id=\"df-name\" maxlength=\"40\" placeholder=\"pl. Kovács Anna\"></label>" +
+        "<div class=\"modal-error\" id=\"df-error\"></div>" +
+        "<div class=\"modal-actions\">" +
+        "<button class=\"btn\" id=\"df-cancel\">Mégse</button>" +
+        "<button class=\"btn primary\" id=\"df-submit\">Foglalás</button>" +
+        "</div>";
+      root.appendChild(backdrop);
+      var input = modal.querySelector("#df-name");
+      input.value = rememberedName();
+      var submitBtn = modal.querySelector("#df-submit");
+      function trySubmit() {
+        var name = input.value.trim();
+        if (!name) { modal.querySelector("#df-error").textContent = "Add meg a neved a foglaláshoz."; return; }
+        var otherIdx = findDeskForName(dateKey, name, deskIdx);
+        if (otherIdx !== -1) { showMoveConfirm(otherIdx, name); return; }
+        commitBooking(dateKey, deskIdx, name);
+      }
+      function showMoveConfirm(otherIdx, name) {
+        modal.innerHTML =
+          "<h3>" + deskLabel + ". asztal</h3>" +
+          "<p>" + escapeHtml(name) + " már foglalt egy asztalt ma (" + (otherIdx + 1) + ". asztal). Egy név naponta csak egy asztalt foglalhat — átteszed ide?</p>" +
+          "<div class=\"modal-actions\">" +
+          "<button class=\"btn\" id=\"df-move-cancel\">Mégse</button>" +
+          "<button class=\"btn primary\" id=\"df-move-confirm\">Áthelyezés ide</button>" +
+          "</div>";
+        modal.querySelector("#df-move-cancel").addEventListener("click", closeModal);
+        modal.querySelector("#df-move-confirm").addEventListener("click", function () {
+          commitMove(dateKey, otherIdx, deskIdx, name);
+        });
+      }
+      submitBtn.addEventListener("click", trySubmit);
+      input.addEventListener("keydown", function (e) { if (e.key === "Enter") trySubmit(); });
+      modal.querySelector("#df-cancel").addEventListener("click", closeModal);
+      input.focus();
+      input.select();
+    } else {
+      modal.innerHTML =
+        "<h3>" + deskLabel + ". asztal — foglalt</h3>" +
+        "<p>" + dateLabel + " · Foglalta: <strong>" + escapeHtml(existing) + "</strong></p>" +
+        "<label>Írd be a nevet a lemondáshoz<input type=\"text\" id=\"df-confirm\" maxlength=\"40\" placeholder=\"" + escapeHtml(existing) + "\"></label>" +
+        "<div class=\"modal-error\" id=\"df-error\"></div>" +
+        "<div class=\"modal-actions\">" +
+        "<button class=\"btn\" id=\"df-cancel\">Bezárás</button>" +
+        "<button class=\"btn danger\" id=\"df-cancel-booking\" disabled>Lemondás</button>" +
+        "</div>";
+      root.appendChild(backdrop);
+      var confirmInput = modal.querySelector("#df-confirm");
+      var cancelBtn = modal.querySelector("#df-cancel-booking");
+      confirmInput.addEventListener("input", function () {
+        cancelBtn.disabled = !namesMatch(confirmInput.value, existing);
+      });
+      cancelBtn.addEventListener("click", function () { commitCancel(dateKey, deskIdx); });
+      modal.querySelector("#df-cancel").addEventListener("click", closeModal);
+      confirmInput.focus();
+    }
+
+    document.addEventListener("keydown", function esc(e) {
+      if (e.key === "Escape") { closeModal(); document.removeEventListener("keydown", esc); }
+    });
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
+  /* ================= rendering ================= */
+  function renderApp() {
+    var app = document.getElementById("app");
+    app.innerHTML = "";
+
+    /* header */
+    var header = document.createElement("header");
+    header.className = "topbar";
+
+    var brand = document.createElement("div");
+    brand.className = "brand";
+    brand.innerHTML =
+      "<h1>Book your desk</h1>" +
+      "<p class=\"tagline\">" + DESK_COUNT + " asztal</p>";
+    header.appendChild(brand);
+
+    var weekSwitch = document.createElement("div");
+    weekSwitch.className = "week-switch";
+    weekSwitch.setAttribute("role", "tablist");
+    [0, 1].forEach(function (off) {
+      var ws = weekStart(off);
+      var we = addDays(ws, 6);
+      var btn = document.createElement("button");
+      btn.className = "week-pill" + (view.weekOffset === off ? " active" : "");
+      btn.innerHTML =
+        "<span class=\"label\">" + (off === 0 ? "Ez a hét" : "Jövő hét") + "</span>" +
+        "<span class=\"range\">" + fmtHu(ws) + " – " + fmtHu(we) + "</span>";
+      btn.addEventListener("click", function () { view.weekOffset = off; renderApp(); });
+      weekSwitch.appendChild(btn);
+    });
+    header.appendChild(weekSwitch);
+    app.appendChild(header);
+
+    /* day tabs */
+    var tabs = document.createElement("nav");
+    tabs.className = "day-tabs";
+    tabs.setAttribute("role", "tablist");
+    var ws0 = weekStart(view.weekOffset);
+    for (var i = 0; i < 7; i++) {
+      var d = addDays(ws0, i);
+      var key = isoDate(d);
+      var holiday = getHoliday(d);
+      var occ = occupancyFor(key);
+      var isWeekend = (i === 5 || i === 6);
+      var tab = document.createElement("button");
+      tab.className = "day-tab" +
+        (i === view.dayIndex ? " active" : "") +
+        (isWeekend ? " is-weekend" : "") +
+        (holiday ? " is-holiday" : "") +
+        (occ >= DESK_COUNT ? " is-full" : "");
+      tab.innerHTML =
+        "<span class=\"day-name full\">" + DAYS_HU[i] + "</span>" +
+        "<span class=\"day-name short\">" + DAYS_HU_SHORT[i] + "</span>" +
+        "<span class=\"day-date\">" + fmtHu(d) + "</span>" +
+        "<span class=\"day-badge\">" + (holiday ? "ünnep" : occ + "/" + DESK_COUNT) + "</span>";
+      (function (idx) { tab.addEventListener("click", function () { view.dayIndex = idx; renderApp(); }); })(i);
+      tabs.appendChild(tab);
+    }
+    app.appendChild(tabs);
+
+    /* board */
+    var date = currentDate();
+    var dateKey = isoDate(date);
+    var holidayName = getHoliday(date);
+    var slots = slotsFor(dateKey);
+    var occ = slots.filter(Boolean).length;
+
+    var board = document.createElement("main");
+    board.className = "board";
+
+    var heading = document.createElement("div");
+    heading.className = "board-heading";
+    heading.innerHTML =
+      "<h2>" + DAYS_HU[view.dayIndex] + ", " + fmtHu(date) + "</h2>" +
+      "<span class=\"occupancy mono\">" + occ + " / " + DESK_COUNT + " asztal foglalt</span>";
+    board.appendChild(heading);
+
+    if (holidayName) {
+      var banner = document.createElement("div");
+      banner.className = "holiday-banner";
+      banner.textContent = "Munkaszüneti nap — " + holidayName + ". Nincs szükség foglalásra.";
+      board.appendChild(banner);
+    }
+
+    var floorWrap = document.createElement("div");
+    floorWrap.className = "floor-wrap";
+    var floor = document.createElement("div");
+    floor.className = "floor" + (holidayName ? " disabled" : "");
+    floor.innerHTML =
+      "<svg class=\"floor-plan-svg\" viewBox=\"0 0 1110 920\" preserveAspectRatio=\"none\" aria-hidden=\"true\">" +
+      "<defs><pattern id=\"floor-grid\" width=\"40\" height=\"40\" patternUnits=\"userSpaceOnUse\">" +
+      "<path d=\"M40 0H0V40\" fill=\"none\" stroke=\"var(--border)\" stroke-width=\"1\"/>" +
+      "</pattern></defs>" +
+      "<polygon points=\"" + ROOM_OUTLINE + "\" fill=\"url(#floor-grid)\" stroke=\"var(--border)\" stroke-width=\"16\" stroke-linejoin=\"round\"/>" +
+      INNER_WALLS.map(function (w) {
+        return "<line x1=\"" + w[0] + "\" y1=\"" + w[1] + "\" x2=\"" + w[2] + "\" y2=\"" + w[3] + "\" stroke=\"var(--border)\" stroke-width=\"16\" stroke-linecap=\"round\"/>";
+      }).join("") +
+      "</svg>";
+    DESKS.forEach(function (desk, idx) {
+      var name = slots[idx];
+      var el = document.createElement("button");
+      var isPortrait = desk.rot % 180 !== 0;
+      el.className = "desk " + (name ? "booked" : "available") + (isPortrait ? " desk--portrait" : "");
+      el.style.left = desk.x + "%";
+      el.style.top = desk.y + "%";
+      el.style.setProperty("--rot", desk.rot + "deg");
+      el.setAttribute("aria-label", (idx + 1) + ". asztal, " + (name ? "foglalva: " + name : "szabad"));
+      el.innerHTML =
+        "<span class=\"desk-label\">" +
+        "<span class=\"desk-num\">" + (idx + 1) + "</span>" +
+        (name ? "<span class=\"desk-name\">" + escapeHtml(name) + "</span>" : "") +
+        "</span>";
+      el.addEventListener("click", function () { openDeskModal(dateKey, idx, date); });
+      floor.appendChild(el);
+    });
+    floorWrap.appendChild(floor);
+    board.appendChild(floorWrap);
+
+    var legend = document.createElement("div");
+    legend.className = "legend";
+    legend.innerHTML =
+      "<span class=\"legend-item\"><span class=\"legend-swatch\"></span>Szabad</span>" +
+      "<span class=\"legend-item\"><span class=\"legend-swatch booked\"></span>Foglalt</span>" +
+      "<span class=\"legend-item\"><span class=\"legend-swatch holiday\"></span>Munkaszüneti nap</span>";
+    board.appendChild(legend);
+
+    app.appendChild(board);
+
+    var modalRoot = document.getElementById("modal-root");
+    if (!modalRoot) { modalRoot = document.createElement("div"); modalRoot.id = "modal-root"; document.body.appendChild(modalRoot); }
+
+    var footer = document.createElement("footer");
+    footer.className = "hint";
+    footer.textContent = "A hét mindig a mai naptól számítva frissül — nincs szükség kézi átállításra.";
+    app.appendChild(footer);
+  }
+
+  renderApp();
+})();
+</script>
+</body>
+</html>
