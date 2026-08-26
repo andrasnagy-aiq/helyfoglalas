@@ -511,20 +511,13 @@
   function occupancyFor(dateKey) { return slotsFor(dateKey).filter(Boolean).length; }
 
   /* ================= local (per-viewer) view state ================= */
+  // Always starts on today's day/week — never persisted, so opening or
+  // reopening the link always lands on the current day.
   function defaultView() {
     var today = new Date();
     return { weekOffset: 0, dayIndex: (today.getDay() + 6) % 7 };
   }
-  function restoreView() {
-    try {
-      var raw = sessionStorage.getItem("db_view");
-      return raw ? JSON.parse(raw) : null;
-    } catch (e) { return null; }
-  }
-  var view = restoreView() || defaultView();
-  function saveView() {
-    try { sessionStorage.setItem("db_view", JSON.stringify(view)); } catch (e) {}
-  }
+  var view = defaultView();
   function currentDate() { return addDays(weekStart(view.weekOffset), view.dayIndex); }
 
   function rememberedName() {
@@ -875,7 +868,7 @@
       btn.innerHTML =
         "<span class=\"label\">" + (off === 0 ? "Ez a hét" : "Jövő hét") + "</span>" +
         "<span class=\"range\">" + fmtHu(ws) + " – " + fmtHu(we) + "</span>";
-      btn.addEventListener("click", function () { view.weekOffset = off; saveView(); renderApp(); });
+      btn.addEventListener("click", function () { view.weekOffset = off; renderApp(); });
       weekSwitch.appendChild(btn);
     });
     header.appendChild(weekSwitch);
@@ -903,7 +896,7 @@
         "<span class=\"day-name short\">" + DAYS_HU_SHORT[i] + "</span>" +
         "<span class=\"day-date\">" + fmtHu(d) + "</span>" +
         "<span class=\"day-badge\">" + (holiday ? "ünnep" : occ + "/" + DESK_COUNT) + "</span>";
-      (function (idx) { tab.addEventListener("click", function () { view.dayIndex = idx; saveView(); renderApp(); }); })(i);
+      (function (idx) { tab.addEventListener("click", function () { view.dayIndex = idx; renderApp(); }); })(i);
       tabs.appendChild(tab);
     }
     app.appendChild(tabs);
