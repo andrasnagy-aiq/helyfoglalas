@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Work+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<style>
+<style id="app-styles">
   :root {
     --bg: #F5F1E7;
     --surface: #FFFFFF;
@@ -212,15 +212,15 @@
     position: relative;
     width: 100%;
     min-width: 480px;
-    aspect-ratio: 1110 / 920;
+    aspect-ratio: 1074 / 917;
   }
   .floor.disabled { opacity: .45; pointer-events: none; }
   .floor-plan-svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 
   .desk {
     position: absolute;
-    width: 12%;
-    height: 6%;
+    width: 18.2%;
+    height: 10.66%;
     transform: translate(-50%, -50%) rotate(var(--rot));
     border-radius: 8px;
     border: 2px solid var(--border);
@@ -368,26 +368,27 @@
   // bounding box, matching ROOM_OUTLINE's viewBox; rot 0 = landscape desk
   // (100x50), rot 90 = portrait desk (50x100).
   var DESKS = [
-    { id: 1, x: 56.76, y: 23.55, rot: 0 },
-    { id: 2, x: 68.76, y: 23.55, rot: 0 },
-    { id: 3, x: 56.76, y: 29.55, rot: 180 },
-    { id: 4, x: 68.76, y: 29.55, rot: 180 },
-    { id: 5, x: 41.4, y: 67.03, rot: 270 },
-    { id: 6, x: 41.4, y: 85.86, rot: 270 },
-    { id: 7, x: 76.11, y: 57.8, rot: 270 },
-    { id: 8, x: 81.09, y: 57.8, rot: 90 },
-    { id: 9, x: 76.46, y: 87.5, rot: 270 },
-    { id: 10, x: 81.43, y: 87.5, rot: 90 }
+    { id: 1, x: 58.87, y: 19.35, rot: 0 },
+    { id: 2, x: 77.07, y: 19.35, rot: 0 },
+    { id: 3, x: 58.87, y: 30.05, rot: 180 },
+    { id: 4, x: 77.07, y: 30.05, rot: 180 },
+    { id: 5, x: 40.97, y: 63.4, rot: 270 },
+    { id: 6, x: 40.97, y: 86.1, rot: 270 },
+    { id: 7, x: 75.02, y: 56.1, rot: 270 },
+    { id: 8, x: 84.12, y: 56.1, rot: 90 },
+    { id: 9, x: 75.25, y: 85.83, rot: 270 },
+    { id: 10, x: 84.35, y: 85.83, rot: 90 }
   ];
   var DESK_COUNT = DESKS.length;
   // Outer wall outline in the same 0-100 coordinate space, viewBox units
-  // (1110 x 920, matching the .floor aspect-ratio 1-to-1 with % above).
-  var ROOM_OUTLINE = "0,0 1110,0 1110,920 315,920 315,195 0,195";
+  // (1074 x 917 — the room's true measured proportions, matching the
+  // .floor aspect-ratio 1-to-1 with the % positions above).
+  var ROOM_OUTLINE = "0,0 1074,0 1074,917 297,917 297,187 0,187";
   // Internal wall separating the desk 1-4 room from the desk 5-10 room,
   // with a doorway gap in the middle (as drawn on the floor plan).
   var INNER_WALLS = [
-    [315, 427, 360, 427],
-    [470, 427, 1110, 427]
+    [297, 409, 342, 409],
+    [452, 409, 1074, 409]
   ];
 
   var MONTHS_HU = ["jan.", "febr.", "márc.", "ápr.", "máj.", "jún.", "júl.", "aug.", "szept.", "okt.", "nov.", "dec."];
@@ -490,12 +491,16 @@
   }
 
   /* ================= document rebuild (for publish) ================= */
-  var DOC_HEAD = "<!doctype html>\n<html lang=\"hu\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>Book your desk</title>\n<link rel=\"preconnect\" href=\"https://fonts.googleapis.com\">\n<link rel=\"preconnect\" href=\"https://fonts.gstatic.com\" crossorigin>\n<link href=\"https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Work+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap\" rel=\"stylesheet\">\n<style>" + document.querySelector("style").textContent + "</style>\n</head>\n<body>\n<div id=\"app\"></div>\n\n<script id=\"state-data\" type=\"application/json\">";
+  var DOC_HEAD = "<!doctype html>\n<html lang=\"hu\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>Book your desk</title>\n<link rel=\"preconnect\" href=\"https://fonts.googleapis.com\">\n<link rel=\"preconnect\" href=\"https://fonts.gstatic.com\" crossorigin>\n<link href=\"https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Work+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap\" rel=\"stylesheet\">\n<style id=\"app-styles\">" + document.getElementById("app-styles").textContent + "</style>\n</head>\n<body>\n<div id=\"app\"></div>\n\n<script id=\"state-data\" type=\"application/json\">";
   var DOC_TAIL_HEAD = "<\/script>\n<script>";
   var DOC_TAIL = "<\/script>\n</body>\n</html>";
 
+  function safeJsonForScript(obj) {
+    return JSON.stringify(obj).replace(/</g, "\\u003c");
+  }
+
   function buildDocument(stateObj) {
-    return DOC_HEAD + JSON.stringify(stateObj) + DOC_TAIL_HEAD + APP_SCRIPT_SRC + DOC_TAIL;
+    return DOC_HEAD + safeJsonForScript(stateObj) + DOC_TAIL_HEAD + APP_SCRIPT_SRC + DOC_TAIL;
   }
 
   /* ================= toast ================= */
@@ -581,12 +586,20 @@
   }
 
   /* ================= modal ================= */
+  var activeEscHandler = null;
   function closeModal() {
     var root = document.getElementById("modal-root");
     if (root) root.innerHTML = "";
+    if (activeEscHandler) {
+      document.removeEventListener("keydown", activeEscHandler);
+      activeEscHandler = null;
+    }
   }
   function openDeskModal(dateKey, deskIdx, dateObj) {
     if (readOnly) { showToast("Csak megtekintés — nincs jogosultságod foglalni."); return; }
+    var holidayName = getHoliday(dateObj);
+    if (holidayName) { showToast("Munkaszüneti nap — " + holidayName + ", nincs foglalás."); return; }
+    closeModal();
     var root = document.getElementById("modal-root");
     var existing = slotsFor(dateKey)[deskIdx];
     var backdrop = document.createElement("div");
@@ -660,9 +673,10 @@
       confirmInput.focus();
     }
 
-    document.addEventListener("keydown", function esc(e) {
-      if (e.key === "Escape") { closeModal(); document.removeEventListener("keydown", esc); }
-    });
+    activeEscHandler = function (e) {
+      if (e.key === "Escape") closeModal();
+    };
+    document.addEventListener("keydown", activeEscHandler);
   }
 
   function escapeHtml(s) {
@@ -760,7 +774,7 @@
     var floor = document.createElement("div");
     floor.className = "floor" + (holidayName ? " disabled" : "");
     floor.innerHTML =
-      "<svg class=\"floor-plan-svg\" viewBox=\"0 0 1110 920\" preserveAspectRatio=\"none\" aria-hidden=\"true\">" +
+      "<svg class=\"floor-plan-svg\" viewBox=\"0 0 1074 917\" preserveAspectRatio=\"none\" aria-hidden=\"true\">" +
       "<defs><pattern id=\"floor-grid\" width=\"40\" height=\"40\" patternUnits=\"userSpaceOnUse\">" +
       "<path d=\"M40 0H0V40\" fill=\"none\" stroke=\"var(--border)\" stroke-width=\"1\"/>" +
       "</pattern></defs>" +
