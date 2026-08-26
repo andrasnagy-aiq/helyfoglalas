@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Work+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.4/dist/umd/supabase.js" integrity="sha384-ysv13JVP3fufiEXfjML9OdCa/rRbMJvUBOWyor82wfuK8INNZAvmbxHgKIHi+oqz" crossorigin="anonymous"></script>
 <style>
   :root {
     --bg: #F5F1E7;
@@ -323,8 +323,7 @@
   }
   .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
   .btn.primary:disabled { opacity: .5; cursor: not-allowed; }
-  .btn.danger { background: var(--booked-bg); border-color: var(--booked); color: var(--booked); }
-  .btn.danger:disabled { opacity: .5; cursor: not-allowed; }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
   .modal-error { font-size: 12.5px; color: var(--booked); min-height: 1em; }
 
   .modal.modal--wide { width: min(440px, 100%); }
@@ -546,6 +545,7 @@
     state.bookings = next;
     loaded = true;
     renderApp();
+    if (activeModalRefresh) activeModalRefresh();
   }
 
   if (supa) {
@@ -578,7 +578,7 @@
   }
 
   /* ================= booking actions ================= */
-  function namesMatch(a, b) { return a.trim().toLowerCase() === b.trim().toLowerCase(); }
+  function namesMatch(a, b) { return String(a).trim().toLowerCase() === String(b).trim().toLowerCase(); }
   function findDeskForName(dateKey, name, excludeIdx) {
     var slots = slotsFor(dateKey);
     for (var i = 0; i < slots.length; i++) {
@@ -590,6 +590,11 @@
 
   /* ================= modal ================= */
   var activeEscHandler = null;
+  // While a desk modal is open, re-renders its day list with fresh data —
+  // set by openDeskModal, called by loadBookings, cleared on close. Without
+  // this, an open modal could keep showing a day as free after someone
+  // else just booked it live, elsewhere.
+  var activeModalRefresh = null;
   function closeModal() {
     var root = document.getElementById("modal-root");
     if (root) root.innerHTML = "";
@@ -597,6 +602,7 @@
       document.removeEventListener("keydown", activeEscHandler);
       activeEscHandler = null;
     }
+    activeModalRefresh = null;
   }
 
   /* ================= multi-day desk booking ================= */
@@ -610,6 +616,9 @@
 
     var modal = document.createElement("div");
     modal.className = "modal modal--wide";
+    modal.setAttribute("role", "dialog");
+    modal.setAttribute("aria-modal", "true");
+    modal.setAttribute("aria-label", (deskIdx + 1) + ". asztal foglalása");
     backdrop.appendChild(modal);
 
     var days = [];
@@ -668,6 +677,7 @@
     });
     nameInput.addEventListener("input", renderRows);
     renderRows();
+    activeModalRefresh = renderRows;
 
     modal.querySelector("#df-cancel").addEventListener("click", closeModal);
     modal.querySelector("#df-save").addEventListener("click", function () { saveUsualSelections(deskIdx, modal, nameInput); });
@@ -675,7 +685,15 @@
     nameInput.select();
 
     activeEscHandler = function (e) {
-      if (e.key === "Escape") closeModal();
+      if (e.key === "Escape") { closeModal(); return; }
+      if (e.key !== "Tab") return;
+      // Basic focus trap: keep Tab/Shift+Tab cycling within the modal
+      // instead of escaping into the page behind it.
+      var focusable = modal.querySelectorAll("input, button:not(:disabled)");
+      if (!focusable.length) return;
+      var first = focusable[0], last = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
     };
     document.addEventListener("keydown", activeEscHandler);
   }
@@ -685,31 +703,36 @@
     var name = nameInput.value.trim();
     if (!name) { modal.querySelector("#df-error").textContent = "Add meg a neved a mentéshez."; return; }
     var saveBtn = modal.querySelector("#df-save");
+    var cancelBtn = modal.querySelector("#df-cancel");
     saveBtn.disabled = true;
     saveBtn.textContent = "Mentés…";
+    cancelBtn.disabled = true;
     var checkboxes = modal.querySelectorAll("input[type=checkbox]");
-    var failures = 0;
+    // Each day is an independent row, so the writes have no dependency on
+    // one another — running them concurrently instead of one at a time
+    // turns "sum of 14 round-trips" into "the slowest single one".
+    var tasks = [];
     for (var i = 0; i < checkboxes.length; i++) {
       var cb = checkboxes[i];
       if (cb.disabled) continue;
       var dateKey = cb.getAttribute("data-date");
       var occupant = slotsFor(dateKey)[deskIdx];
       var isMine = !!(occupant && namesMatch(occupant, name));
-      var res = null;
       if (cb.checked && !isMine) {
         if (!occupant) {
           var otherIdx = findDeskForName(dateKey, name, deskIdx);
           if (otherIdx !== -1) {
-            res = await supa.from("bookings").update({ desk_id: deskIdx + 1 }).eq("booking_date", dateKey).eq("desk_id", otherIdx + 1);
+            tasks.push(supa.from("bookings").update({ desk_id: deskIdx + 1 }).eq("booking_date", dateKey).eq("desk_id", otherIdx + 1));
           } else {
-            res = await supa.from("bookings").insert({ booking_date: dateKey, desk_id: deskIdx + 1, name: name });
+            tasks.push(supa.from("bookings").insert({ booking_date: dateKey, desk_id: deskIdx + 1, name: name }));
           }
         }
       } else if (!cb.checked && isMine) {
-        res = await supa.from("bookings").delete().eq("booking_date", dateKey).eq("desk_id", deskIdx + 1);
+        tasks.push(supa.from("bookings").delete().eq("booking_date", dateKey).eq("desk_id", deskIdx + 1));
       }
-      if (res && res.error) failures++;
     }
+    var results = await Promise.all(tasks);
+    var failures = results.filter(function (r) { return r && r.error; }).length;
     rememberName(name);
     closeModal();
     await loadBookings();
@@ -724,6 +747,15 @@
 
   /* ================= rendering ================= */
   function renderApp() {
+    try {
+      renderAppInner();
+    } catch (err) {
+      console.error(err);
+      var app = document.getElementById("app");
+      if (app) app.innerHTML = "<div class=\"loading\">Hiba történt — próbáld frissíteni az oldalt.</div>";
+    }
+  }
+  function renderAppInner() {
     var app = document.getElementById("app");
     app.innerHTML = "";
 
