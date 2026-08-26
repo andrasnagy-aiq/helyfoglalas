@@ -301,6 +301,7 @@
   }
   .modal h3 { margin: 0; font-family: 'Fraunces', serif; font-size: 19px; font-weight: 600; }
   .modal p { margin: 0; font-size: 13.5px; color: var(--muted); }
+  .modal p.desk-owner { font-size: 12.5px; font-style: italic; color: var(--accent-strong); }
   .modal label { font-size: 13px; font-weight: 600; display: flex; flex-direction: column; gap: 24px; }
   .modal input {
     font: inherit;
@@ -387,6 +388,17 @@
     { id: 10, x: 84.35, y: 85.83, rot: 90 }
   ];
   var DESK_COUNT = DESKS.length;
+  // Desks that are someone's usual/regular spot (shown as a note in the
+  // booking modal). Desk numbers not listed here have no regular owner.
+  var DESK_OWNERS = {
+    1: "Bálint",
+    2: "Atti",
+    3: "Andris",
+    4: "Márk",
+    5: "Áron",
+    6: "Zsombi",
+    7: "Balázs"
+  };
   // Outer wall outline in the same 0-100 coordinate space, viewBox units
   // (1074 x 917 — the room's true measured proportions, matching the
   // .floor aspect-ratio 1-to-1 with the % positions above).
@@ -593,10 +605,13 @@
 
     var deskLabel = deskIdx + 1;
     var dateLabel = DAYS_HU[view.dayIndex] + ", " + fmtHu(dateObj);
+    var owner = DESK_OWNERS[deskLabel];
+    var ownerNote = owner ? "<p class=\"desk-owner\">" + escapeHtml(owner) + " szokásos asztala.</p>" : "";
 
     if (!existing) {
       modal.innerHTML =
         "<h3>" + deskLabel + ". asztal</h3>" +
+        ownerNote +
         "<p>" + dateLabel + "</p>" +
         "<label>Neved<input type=\"text\" id=\"df-name\" maxlength=\"40\" placeholder=\"pl. Kovács Anna\"></label>" +
         "<div class=\"modal-error\" id=\"df-error\"></div>" +
@@ -636,6 +651,7 @@
     } else {
       modal.innerHTML =
         "<h3>" + deskLabel + ". asztal — foglalt</h3>" +
+        ownerNote +
         "<p>" + dateLabel + " · Foglalta: <strong>" + escapeHtml(existing) + "</strong></p>" +
         "<label>Írd be a nevet a lemondáshoz<input type=\"text\" id=\"df-confirm\" maxlength=\"40\" placeholder=\"" + escapeHtml(existing) + "\"></label>" +
         "<div class=\"modal-error\" id=\"df-error\"></div>" +
