@@ -559,6 +559,14 @@
     supa.channel("bookings-sync")
       .on("postgres_changes", { event: "*", schema: "public", table: "bookings" }, function () { loadBookings(); })
       .subscribe();
+    // Safety net: if the realtime socket ever drops during a long idle
+    // period (laptop sleep, backgrounded tab) and doesn't quietly
+    // reconnect, re-syncing on focus/visibility keeps the board from
+    // silently going stale instead of relying on realtime alone.
+    document.addEventListener("visibilitychange", function () {
+      if (document.visibilityState === "visible") loadBookings();
+    });
+    window.addEventListener("focus", function () { loadBookings(); });
   }
   loadBookings();
 
