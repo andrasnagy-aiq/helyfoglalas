@@ -327,6 +327,41 @@
   .btn.danger:disabled { opacity: .5; cursor: not-allowed; }
   .modal-error { font-size: 12.5px; color: var(--booked); min-height: 1em; }
 
+  .modal.modal--wide { width: min(440px, 100%); }
+  .usual-day-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    max-height: 300px;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    padding: 6px;
+  }
+  .usual-week-label {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--muted);
+    padding: 8px 6px 4px;
+  }
+  .modal label.usual-day-row {
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    padding: 6px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 400;
+  }
+  .usual-day-row:hover { background: var(--surface-2); }
+  .usual-day-row.is-disabled { opacity: .5; cursor: not-allowed; }
+  .usual-day-row input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent); flex-shrink: 0; }
+  .usual-day-label { flex: 1; }
+  .usual-day-status { font-size: 11px; color: var(--muted); font-family: 'IBM Plex Mono', monospace; }
+
   /* ---------- toast ---------- */
   .toast {
     position: fixed;
@@ -676,6 +711,100 @@
     document.addEventListener("keydown", activeEscHandler);
   }
 
+  /* ================= usual-desk multi-day booking ================= */
+  function openUsualDeskModal(deskIdx) {
+    closeModal();
+    var owner = DESK_OWNERS[deskIdx + 1];
+    var root = document.getElementById("modal-root");
+    var backdrop = document.createElement("div");
+    backdrop.className = "modal-backdrop";
+    backdrop.addEventListener("click", function (e) { if (e.target === backdrop) closeModal(); });
+
+    var modal = document.createElement("div");
+    modal.className = "modal modal--wide";
+    backdrop.appendChild(modal);
+
+    var initialName = rememberedName();
+    var days = [];
+    [0, 1].forEach(function (offset) {
+      var ws = weekStart(offset);
+      for (var i = 0; i < 7; i++) days.push({ offset: offset, idx: i, date: addDays(ws, i) });
+    });
+
+    var rowsHtml = [0, 1].map(function (offset) {
+      var rows = days.filter(function (d) { return d.offset === offset; }).map(function (d) {
+        var dateKey = isoDate(d.date);
+        var holidayName = getHoliday(d.date);
+        var occupant = slotsFor(dateKey)[deskIdx];
+        var mineNow = !!(occupant && initialName && namesMatch(occupant, initialName));
+        var disabled = !!holidayName || (occupant && !mineNow);
+        var status = holidayName ? "ünnep" : (occupant && !mineNow ? "foglalva: " + occupant : "");
+        return "<label class=\"usual-day-row" + (disabled ? " is-disabled" : "") + "\">" +
+          "<input type=\"checkbox\" data-date=\"" + dateKey + "\"" + (mineNow ? " checked" : "") + (disabled ? " disabled" : "") + ">" +
+          "<span class=\"usual-day-label\">" + DAYS_HU[d.idx] + ", " + fmtHu(d.date) + "</span>" +
+          "<span class=\"usual-day-status\">" + escapeHtml(status) + "</span>" +
+          "</label>";
+      }).join("");
+      return "<div class=\"usual-week-label\">" + (offset === 0 ? "Ez a hét" : "Jövő hét") + "</div>" + rows;
+    }).join("");
+
+    modal.innerHTML =
+      "<h3>" + (deskIdx + 1) + ". asztal</h3>" +
+      "<p class=\"desk-owner\">" + escapeHtml(owner) + " szokásos asztala.</p>" +
+      "<label>Neved<input type=\"text\" id=\"df-name\" maxlength=\"40\" placeholder=\"pl. Kovács Anna\"></label>" +
+      "<div class=\"usual-day-list\">" + rowsHtml + "</div>" +
+      "<div class=\"modal-error\" id=\"df-error\"></div>" +
+      "<div class=\"modal-actions\">" +
+      "<button class=\"btn\" id=\"df-cancel\">Mégse</button>" +
+      "<button class=\"btn primary\" id=\"df-save\">Mentés</button>" +
+      "</div>";
+    root.appendChild(backdrop);
+
+    var nameInput = modal.querySelector("#df-name");
+    nameInput.value = initialName;
+    modal.querySelector("#df-cancel").addEventListener("click", closeModal);
+    modal.querySelector("#df-save").addEventListener("click", function () { saveUsualSelections(deskIdx, modal, nameInput); });
+    nameInput.focus();
+    nameInput.select();
+
+    activeEscHandler = function (e) {
+      if (e.key === "Escape") closeModal();
+    };
+    document.addEventListener("keydown", activeEscHandler);
+  }
+
+  async function saveUsualSelections(deskIdx, modal, nameInput) {
+    var name = nameInput.value.trim();
+    if (!name) { modal.querySelector("#df-error").textContent = "Add meg a neved a mentéshez."; return; }
+    var saveBtn = modal.querySelector("#df-save");
+    saveBtn.disabled = true;
+    saveBtn.textContent = "Mentés…";
+    var checkboxes = modal.querySelectorAll("input[type=checkbox]");
+    for (var i = 0; i < checkboxes.length; i++) {
+      var cb = checkboxes[i];
+      if (cb.disabled) continue;
+      var dateKey = cb.getAttribute("data-date");
+      var occupant = slotsFor(dateKey)[deskIdx];
+      var isMine = !!(occupant && namesMatch(occupant, name));
+      if (cb.checked && !isMine) {
+        if (!occupant) {
+          var otherIdx = findDeskForName(dateKey, name, deskIdx);
+          if (otherIdx !== -1) {
+            await supa.from("bookings").update({ desk_id: deskIdx + 1 }).eq("booking_date", dateKey).eq("desk_id", otherIdx + 1);
+          } else {
+            await supa.from("bookings").insert({ booking_date: dateKey, desk_id: deskIdx + 1, name: name });
+          }
+        }
+      } else if (!cb.checked && isMine) {
+        await supa.from("bookings").delete().eq("booking_date", dateKey).eq("desk_id", deskIdx + 1);
+      }
+    }
+    rememberName(name);
+    closeModal();
+    await loadBookings();
+    showToast("Mentve.");
+  }
+
   function escapeHtml(s) {
     return String(s).replace(/[&<>"']/g, function (c) {
       return { "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[c];
@@ -799,7 +928,10 @@
         "<span class=\"desk-num\">" + (idx + 1) + "</span>" +
         (name ? "<span class=\"desk-name\">" + escapeHtml(name) + "</span>" : "") +
         "</span>";
-      el.addEventListener("click", function () { openDeskModal(dateKey, idx, date); });
+      el.addEventListener("click", function () {
+        if (DESK_OWNERS[idx + 1]) { openUsualDeskModal(idx); }
+        else { openDeskModal(dateKey, idx, date); }
+      });
       floor.appendChild(el);
     });
     floorWrap.appendChild(floor);
