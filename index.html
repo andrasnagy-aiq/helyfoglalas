@@ -588,36 +588,6 @@
     return -1;
   }
 
-  async function commitBooking(dateKey, deskIdx, name) {
-    if (!supa) { showToast("Nem sikerült csatlakozni az adatbázishoz."); return; }
-    rememberName(name);
-    closeModal();
-    var res = await supa.from("bookings").insert({ booking_date: dateKey, desk_id: deskIdx + 1, name: name });
-    if (res.error) {
-      if (String(res.error.message).indexOf("one_per_name_per_day") !== -1) {
-        showToast("Már foglaltál asztalt erre a napra.");
-      } else {
-        showToast("Ezt az asztalt épp most foglalták le, válassz másikat.");
-      }
-    }
-    loadBookings();
-  }
-  async function commitCancel(dateKey, deskIdx) {
-    if (!supa) { showToast("Nem sikerült csatlakozni az adatbázishoz."); return; }
-    closeModal();
-    var res = await supa.from("bookings").delete().eq("booking_date", dateKey).eq("desk_id", deskIdx + 1);
-    if (res.error) { showToast("Hiba történt, próbáld újra."); }
-    loadBookings();
-  }
-  async function commitMove(dateKey, fromIdx, toIdx, name) {
-    if (!supa) { showToast("Nem sikerült csatlakozni az adatbázishoz."); return; }
-    rememberName(name);
-    closeModal();
-    var res = await supa.from("bookings").update({ desk_id: toIdx + 1 }).eq("booking_date", dateKey).eq("desk_id", fromIdx + 1);
-    if (res.error) { showToast("Nem sikerült áthelyezni, próbáld újra."); }
-    loadBookings();
-  }
-
   /* ================= modal ================= */
   var activeEscHandler = null;
   function closeModal() {
@@ -628,95 +598,9 @@
       activeEscHandler = null;
     }
   }
-  function openDeskModal(dateKey, deskIdx, dateObj) {
-    var holidayName = getHoliday(dateObj);
-    if (holidayName) { showToast("Munkaszüneti nap — " + holidayName + ", nincs foglalás."); return; }
-    closeModal();
-    var root = document.getElementById("modal-root");
-    var existing = slotsFor(dateKey)[deskIdx];
-    var backdrop = document.createElement("div");
-    backdrop.className = "modal-backdrop";
-    backdrop.addEventListener("click", function (e) { if (e.target === backdrop) closeModal(); });
 
-    var modal = document.createElement("div");
-    modal.className = "modal";
-    backdrop.appendChild(modal);
-
-    var deskLabel = deskIdx + 1;
-    var dateLabel = DAYS_HU[view.dayIndex] + ", " + fmtHu(dateObj);
-    var owner = DESK_OWNERS[deskLabel];
-    var ownerNote = owner ? "<p class=\"desk-owner\">" + escapeHtml(owner) + " szokásos asztala.</p>" : "";
-
-    if (!existing) {
-      modal.innerHTML =
-        "<h3>" + deskLabel + ". asztal</h3>" +
-        ownerNote +
-        "<p>" + dateLabel + "</p>" +
-        "<label>Neved<input type=\"text\" id=\"df-name\" maxlength=\"40\" placeholder=\"pl. Kovács Anna\"></label>" +
-        "<div class=\"modal-error\" id=\"df-error\"></div>" +
-        "<div class=\"modal-actions\">" +
-        "<button class=\"btn\" id=\"df-cancel\">Mégse</button>" +
-        "<button class=\"btn primary\" id=\"df-submit\">Foglalás</button>" +
-        "</div>";
-      root.appendChild(backdrop);
-      var input = modal.querySelector("#df-name");
-      input.value = rememberedName();
-      var submitBtn = modal.querySelector("#df-submit");
-      function trySubmit() {
-        var name = input.value.trim();
-        if (!name) { modal.querySelector("#df-error").textContent = "Add meg a neved a foglaláshoz."; return; }
-        var otherIdx = findDeskForName(dateKey, name, deskIdx);
-        if (otherIdx !== -1) { showMoveConfirm(otherIdx, name); return; }
-        commitBooking(dateKey, deskIdx, name);
-      }
-      function showMoveConfirm(otherIdx, name) {
-        modal.innerHTML =
-          "<h3>" + deskLabel + ". asztal</h3>" +
-          "<p>" + escapeHtml(name) + " már foglalt egy asztalt ma (" + (otherIdx + 1) + ". asztal). Egy név naponta csak egy asztalt foglalhat — átteszed ide?</p>" +
-          "<div class=\"modal-actions\">" +
-          "<button class=\"btn\" id=\"df-move-cancel\">Mégse</button>" +
-          "<button class=\"btn primary\" id=\"df-move-confirm\">Áthelyezés ide</button>" +
-          "</div>";
-        modal.querySelector("#df-move-cancel").addEventListener("click", closeModal);
-        modal.querySelector("#df-move-confirm").addEventListener("click", function () {
-          commitMove(dateKey, otherIdx, deskIdx, name);
-        });
-      }
-      submitBtn.addEventListener("click", trySubmit);
-      input.addEventListener("keydown", function (e) { if (e.key === "Enter") trySubmit(); });
-      modal.querySelector("#df-cancel").addEventListener("click", closeModal);
-      input.focus();
-      input.select();
-    } else {
-      modal.innerHTML =
-        "<h3>" + deskLabel + ". asztal — foglalt</h3>" +
-        ownerNote +
-        "<p>" + dateLabel + " · Foglalta: <strong>" + escapeHtml(existing) + "</strong></p>" +
-        "<label>Írd be a nevet a lemondáshoz<input type=\"text\" id=\"df-confirm\" maxlength=\"40\" placeholder=\"" + escapeHtml(existing) + "\"></label>" +
-        "<div class=\"modal-error\" id=\"df-error\"></div>" +
-        "<div class=\"modal-actions\">" +
-        "<button class=\"btn\" id=\"df-cancel\">Bezárás</button>" +
-        "<button class=\"btn danger\" id=\"df-cancel-booking\" disabled>Lemondás</button>" +
-        "</div>";
-      root.appendChild(backdrop);
-      var confirmInput = modal.querySelector("#df-confirm");
-      var cancelBtn = modal.querySelector("#df-cancel-booking");
-      confirmInput.addEventListener("input", function () {
-        cancelBtn.disabled = !namesMatch(confirmInput.value, existing);
-      });
-      cancelBtn.addEventListener("click", function () { commitCancel(dateKey, deskIdx); });
-      modal.querySelector("#df-cancel").addEventListener("click", closeModal);
-      confirmInput.focus();
-    }
-
-    activeEscHandler = function (e) {
-      if (e.key === "Escape") closeModal();
-    };
-    document.addEventListener("keydown", activeEscHandler);
-  }
-
-  /* ================= usual-desk multi-day booking ================= */
-  function openUsualDeskModal(deskIdx) {
+  /* ================= multi-day desk booking ================= */
+  function openDeskModal(deskIdx) {
     closeModal();
     var owner = DESK_OWNERS[deskIdx + 1];
     var root = document.getElementById("modal-root");
@@ -759,9 +643,11 @@
       }).join("");
     }
 
+    var ownerNote = owner ? "<p class=\"desk-owner\">" + escapeHtml(owner) + " szokásos asztala.</p>" : "";
+
     modal.innerHTML =
       "<h3>" + (deskIdx + 1) + ". asztal</h3>" +
-      "<p class=\"desk-owner\">" + escapeHtml(owner) + " szokásos asztala.</p>" +
+      ownerNote +
       "<label>Neved<input type=\"text\" id=\"df-name\" maxlength=\"40\" placeholder=\"pl. Kovács Anna\"></label>" +
       "<div class=\"usual-day-list\" id=\"df-day-list\"></div>" +
       "<div class=\"modal-error\" id=\"df-error\"></div>" +
@@ -953,10 +839,7 @@
         "<span class=\"desk-num\">" + (idx + 1) + "</span>" +
         (name ? "<span class=\"desk-name\">" + escapeHtml(name) + "</span>" : "") +
         "</span>";
-      el.addEventListener("click", function () {
-        if (DESK_OWNERS[idx + 1]) { openUsualDeskModal(idx); }
-        else { openDeskModal(dateKey, idx, date); }
-      });
+      el.addEventListener("click", function () { openDeskModal(idx); });
       floor.appendChild(el);
     });
     floorWrap.appendChild(floor);
