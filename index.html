@@ -116,7 +116,23 @@
     margin: 4px 0 0;
     color: var(--muted);
     font-size: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
   }
+  .admin-toggle {
+    border: none;
+    background: none;
+    padding: 0;
+    color: var(--muted);
+    font-size: 12px;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    cursor: pointer;
+  }
+  .admin-toggle:hover { color: var(--ink); }
+  .admin-toggle.is-on { color: var(--accent-strong); text-decoration: none; font-weight: 600; }
   .week-switch {
     display: flex;
     gap: 8px;
@@ -526,6 +542,18 @@
     try { localStorage.setItem("db_name", n); } catch (e) {}
   }
 
+  /* ================= admin mode ================= */
+  // A shared passcode, not real access control: anyone with the deployed
+  // page's source (or a browser's dev tools) can already write or delete
+  // any row directly against the database regardless of this flag — the
+  // whole app runs on an open API key with no per-user identity. This
+  // exists to keep one trusted person from *accidentally* clearing out
+  // someone else's booking through the normal UI, not to stop a
+  // determined bad actor.
+  var ADMIN_PASSCODE = "deskadmin2026";
+  var isAdmin = false;
+  try { isAdmin = sessionStorage.getItem("db_admin") === "1"; } catch (e) {}
+
   /* ================= data sync ================= */
   async function loadBookings() {
     if (!supa) { loaded = true; renderApp(); showToast("Nem sikerült csatlakozni az adatbázishoz."); return; }
@@ -605,6 +633,61 @@
     activeModalRefresh = null;
   }
 
+  /* ================= admin unlock ================= */
+  function openAdminPrompt() {
+    closeModal();
+    var root = document.getElementById("modal-root");
+    var backdrop = document.createElement("div");
+    backdrop.className = "modal-backdrop";
+    backdrop.addEventListener("click", function (e) { if (e.target === backdrop) closeModal(); });
+
+    var modal = document.createElement("div");
+    modal.className = "modal";
+    modal.setAttribute("role", "dialog");
+    modal.setAttribute("aria-modal", "true");
+    modal.setAttribute("aria-label", "Admin belépés");
+    backdrop.appendChild(modal);
+
+    modal.innerHTML =
+      "<h3>Admin belépés</h3>" +
+      "<p>Admin módban bármelyik nap bármelyik foglalása lemondható, nemcsak a sajátod.</p>" +
+      "<label>Jelszó<input type=\"password\" id=\"admin-pass\"></label>" +
+      "<div class=\"modal-error\" id=\"df-error\"></div>" +
+      "<div class=\"modal-actions\">" +
+      "<button class=\"btn\" id=\"df-cancel\">Mégse</button>" +
+      "<button class=\"btn primary\" id=\"admin-submit\">Belépés</button>" +
+      "</div>";
+    root.appendChild(backdrop);
+
+    var passInput = modal.querySelector("#admin-pass");
+    function trySubmit() {
+      if (passInput.value === ADMIN_PASSCODE) {
+        isAdmin = true;
+        try { sessionStorage.setItem("db_admin", "1"); } catch (e) {}
+        closeModal();
+        renderApp();
+        showToast("Admin mód bekapcsolva.");
+      } else {
+        modal.querySelector("#df-error").textContent = "Helytelen jelszó.";
+      }
+    }
+    modal.querySelector("#admin-submit").addEventListener("click", trySubmit);
+    passInput.addEventListener("keydown", function (e) { if (e.key === "Enter") trySubmit(); });
+    modal.querySelector("#df-cancel").addEventListener("click", closeModal);
+    passInput.focus();
+
+    activeEscHandler = function (e) {
+      if (e.key === "Escape") { closeModal(); return; }
+      if (e.key !== "Tab") return;
+      var focusable = modal.querySelectorAll("input, button:not(:disabled)");
+      if (!focusable.length) return;
+      var first = focusable[0], last = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    };
+    document.addEventListener("keydown", activeEscHandler);
+  }
+
   /* ================= multi-day desk booking ================= */
   function openDeskModal(deskIdx) {
     closeModal();
@@ -635,8 +718,11 @@
       var holidayName = getHoliday(d.date);
       var occupant = slotsFor(d.dateKey)[deskIdx];
       var mineNow = !!(occupant && name && namesMatch(occupant, name));
-      var disabled = !!holidayName || (occupant && !mineNow);
-      var checked = Object.prototype.hasOwnProperty.call(overrides, d.dateKey) ? overrides[d.dateKey] : mineNow;
+      var disabled = !!holidayName || (occupant && !mineNow && !isAdmin);
+      // Admin sees any occupied day as checked (so unchecking cancels it,
+      // whoever it belongs to); everyone else only sees their own.
+      var baseChecked = isAdmin ? !!occupant : mineNow;
+      var checked = Object.prototype.hasOwnProperty.call(overrides, d.dateKey) ? overrides[d.dateKey] : baseChecked;
       var status = holidayName ? "ünnep" : (occupant && !mineNow ? "foglalva: " + occupant : "");
       return "<label class=\"usual-day-row" + (disabled ? " is-disabled" : "") + "\">" +
         "<input type=\"checkbox\" data-date=\"" + d.dateKey + "\"" + (checked ? " checked" : "") + (disabled ? " disabled" : "") + ">" +
@@ -727,7 +813,8 @@
             tasks.push(supa.from("bookings").insert({ booking_date: dateKey, desk_id: deskIdx + 1, name: name }));
           }
         }
-      } else if (!cb.checked && isMine) {
+      } else if (!cb.checked && (isMine || (isAdmin && occupant))) {
+        // Admin can cancel any occupied day here, not just their own.
         tasks.push(supa.from("bookings").delete().eq("booking_date", dateKey).eq("desk_id", deskIdx + 1));
       }
     }
@@ -772,8 +859,20 @@
     brand.className = "brand";
     brand.innerHTML =
       "<h1>Book your desk</h1>" +
-      "<p class=\"tagline\">" + DESK_COUNT + " asztal</p>";
+      "<p class=\"tagline\">" + DESK_COUNT + " asztal" +
+      "<button class=\"admin-toggle" + (isAdmin ? " is-on" : "") + "\" id=\"admin-toggle\">" +
+      (isAdmin ? "Admin mód: be" : "Admin") +
+      "</button></p>";
     header.appendChild(brand);
+    brand.querySelector("#admin-toggle").addEventListener("click", function () {
+      if (isAdmin) {
+        isAdmin = false;
+        try { sessionStorage.removeItem("db_admin"); } catch (e) {}
+        renderApp();
+      } else {
+        openAdminPrompt();
+      }
+    });
 
     var weekSwitch = document.createElement("div");
     weekSwitch.className = "week-switch";
